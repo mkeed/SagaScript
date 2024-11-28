@@ -1,0 +1,33 @@
+{
+    "variables": {
+	"root_dir" : "/workspace",
+	"setup_dir" : "CreateFiles",
+	"dir" : "${root_dir}/${setup_dir}"
+    },
+    "input": {
+	"config_tarball":{}
+    },
+    "actions": [
+	{
+	    "name": "setup_dirs",
+	    "pre_conditions": [
+		{"dir": {"name": "${root_dir}","exist": true}},
+		{"dir": {"name": "${root_dir}/${setup_dir}","exist": false}}
+	    ],
+	    "dependencies": [],
+	    "setup": {
+		"bash": "mkdir ${setup_dir} -p"
+	    },
+	    "teardown": {
+		"bash": "rm -rf ${dir}"
+	    }
+	},
+	{
+	    "name": "copy_config",
+	    "dependencies": ["setup_dirs"],
+	    "setup": {
+		"bash": ""
+	    },
+	}
+    ]
+}

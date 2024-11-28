@@ -81,5 +81,9 @@ pub fn Dag(opts: DagOpts) type {
                 try std.fmt.format(writer, "]\n", .{});
             }
         }
+
+        pub fn toExec(self: Self) ExecList {
+            //
+        }
     };
 }
