@@ -7,13 +7,13 @@ pub const VariableStore = struct {
     pub fn init(alloc: std.mem.Allocator) VariableStore {
         return .{
             .alloc = alloc,
-            .map = std.StringArrayHashMap(*std.ArrayList(u8)).init(alloc),
+            .map = std.StringArrayHashMap(std.ArrayList(u8)).init(alloc),
         };
     }
-    pub fn deinit(self: VariableStore) void {
+    pub fn deinit(self: *VariableStore) void {
         var iter = self.map.iterator();
         while (iter.next()) |n| {
-            self.alloc.free(u8, n.key_ptr.*);
+            self.alloc.free(n.key_ptr.*);
             n.value_ptr.deinit();
         }
         self.map.deinit();

@@ -35,12 +35,31 @@ const Parser = struct {
     }
 };
 
-test {
-    var p = Parser{ .input = " Hello {name}   " };
+pub fn format(out: *std.ArrayList(u8), fmt: []const u8, vars: *const VStore) !void {
+    var p = Parser{ .input = fmt };
     while (try p.next()) |n| {
         switch (n) {
-            .format => |f| std.log.err("format [{s}]", .{f}),
-            .text => |f| std.log.err("[{s}]", .{f}),
+            .format => |f| {
+                if (vars.get(f)) |val| {
+                    try out.appendSlice(val);
+                } else {
+                    return error.MissingVariable;
+                }
+            },
+            .text => |f| {
+                try out.appendSlice(f);
+            },
         }
     }
+}
+
+test {
+    const alloc = std.testing.allocator;
+    var vars = VStore.init(alloc);
+    defer vars.deinit();
+    try vars.set("name", "Test Name");
+    var out = std.ArrayList(u8).init(alloc);
+    defer out.deinit();
+    try format(&out, "Hello {name}", &vars);
+    try std.testing.expectEqualSlices(u8, "Hello Test Name", out.items);
 }
