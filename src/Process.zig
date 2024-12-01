@@ -11,6 +11,8 @@ pub const SubProcess = struct {
         args: []const []const u8,
         env: []const []const u8,
     ) !SubProcess {
+        var fileBuf = std.ArrayList(u8).init(alloc);
+        defer fileBuf.deinit();
         var self = SubProcess{
             .alloc = alloc,
             .file = try alloc.dupeZ(file),
@@ -18,7 +20,11 @@ pub const SubProcess = struct {
             .env = std.ArrayList([]u8).init(alloc),
         };
         errdefer self.deinit();
-
+        {
+            const d = try self.alloc.dupeZ(u8, file);
+            errdefer self.alloc.free(a);
+            try self.args.append(d);
+        }
         for (args) |a| {
             const d = try self.alloc.dupeZ(u8, a);
             errdefer self.alloc.free(a);
@@ -41,18 +47,71 @@ pub const SubProcess = struct {
         self.env.deinit();
     }
     pub const ProcRun = struct {
-        pub const childPids = struct {
+        pub const PipeFds = struct {
             stdin: std.posix.fd_t,
             stdout: std.posix.fd_t,
             stderr: std.posix.fd_t,
         };
-        pid: std.posix.fd_t,
+        pub const SubPipes = struct {
+            const ReadEnd = 0;
+            const WriteEnd = 1;
+            stdin: [2]std.posix.fd_t,
+            stdout: [2]std.posix.fd_t,
+            stderr: [2]std.posix.fd_t,
+            pub fn init() !SubPipes {
+                const stderr = try std.posix.pipe2(.{ .CLOEXEC = false });
+                errdefer std.posix.close(stderr[0]);
+                errdefer std.posix.close(stderr[1]);
+                const stdin = try std.posix.pipe2(.{ .CLOEXEC = false });
+                errdefer std.posix.close(stdin[0]);
+                errdefer std.posix.close(stdin[1]);
+                const stdout = try std.posix.pipe2(.{ .CLOEXEC = false });
+                errdefer std.posix.close(stdin[0]);
+                errdefer std.posix.close(stdin[1]);
+                return .{
+                    .stdin = stdin,
+                    .stdout = stdout,
+                    .stderr = stderr,
+                };
+            }
+            pub fn handleChild(self: SubPipes) !void {
+                std.posix.close(std.posix.STDIN_FILENO);
+                std.posix.dup2(self.stdin[WriteEnd], std.posix.STDIN_FILENO);
+                std.posix.close(std.posix.STDERR_FILENO);
+                std.posix.dup2(self.stdin[ReadEnd], std.posix.STDERR_FILENO);
+                std.posix.close(std.posix.STDOUT_FILENO);
+                std.posix.dup2(self.stdin[WriteEnd], std.posix.STDOUT_FILENO);
+
+                //
+            }
+            pub fn getParent(self: SubPipes) !PipeFds {
+                std.posix.close(self.stdin[ReadEnd]);
+                std.posix.close(self.stdout[WriteEnd]);
+                std.posix.close(self.stderr[WriteEnd]);
+                return .{
+                    .stdin = self.stdin[WriteEnd],
+                    .stdout = self.stdin[ReadEnd],
+                    .stderr = self.stderr[ReadEnd],
+                };
+            }
+        };
+        fds: PipeFds,
+        pid: std.posix.pid_t,
     };
     pub fn run(self: SubProcess) !ProcRun {
+        const pipes = try SubPipes.init();
+
         const child_pid = try std.posix.fork();
         switch (child_pid) {
-            0 => {},
+            0 => {
+                try pipes.handleChild();
+            },
             else => {
+                const fds = try pipes.getParent();
+                return .{
+                    .fds = fds,
+                    .pid = child_pid,
+                };
                 //
             },
         }
